@@ -68,9 +68,10 @@ class HittingAgent(AgentBase):
             self.joint_anchor_pos = np.array([6.28479822e-11, 7.13520517e-01, -2.96302903e-11, -5.02477487e-01,
                                               -7.67250279e-11, 1.92566224e+00, -2.34645597e-11])
 
-        goal_pos = np.array([0.0, 0.0, 0.0])
+        goal_pos = np.array([0.98, 0.0, 0.0])
         goal_pos_robot = world_to_robot(self.env_info["robot"]["base_frame"][0], goal_pos)
         self.goal_pos_2d = goal_pos_robot[0][:2]
+
 
 
         self.agent_params = {
