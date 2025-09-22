@@ -20,12 +20,12 @@ def build_agent(env_info, **kwargs):
     Returns:
          (AgentBase) An instance of the Agent
     """
-    return HittingAgent(env_info, **kwargs)
+    return ChickenHockeyAgent(env_info, **kwargs)
 
 
-class HittingAgent(AgentBase):
+class ChickenHockeyAgent(AgentBase):
     def __init__(self, env_info, agent_id=1, **kwargs):
-        super(HittingAgent, self).__init__(env_info, agent_id, **kwargs)
+        super(ChickenHockeyAgent, self).__init__(env_info, agent_id, **kwargs)
         self.last_cmd = None
         self.joint_trajectory = None
         self.restart = True
@@ -38,7 +38,7 @@ class HittingAgent(AgentBase):
         self.hit_finished = False
         self.x_init = None
         self.predicted_time = 0.75
-        self.hit_vel = 1.0
+        self.hit_vel = 0.5
         self.replan_hit = False
 
         self.dt = 1 / self.env_info['robot']['control_frequency']
@@ -68,41 +68,9 @@ class HittingAgent(AgentBase):
             self.joint_anchor_pos = np.array([6.28479822e-11, 7.13520517e-01, -2.96302903e-11, -5.02477487e-01,
                                               -7.67250279e-11, 1.92566224e+00, -2.34645597e-11])
 
-        goal_pos = np.array([0.98, 0.0, 0.0])
+        goal_pos = np.array([0.98, 0.5, 0.0])
         goal_pos_robot = world_to_robot(self.env_info["robot"]["base_frame"][0], goal_pos)
         self.goal_pos_2d = goal_pos_robot[0][:2]
-
-        safety_margin = 0.02
-        puck_clearance = self.env_info['puck']['radius'] + safety_margin
-        table_length = self.env_info['table']['length']
-        table_width = self.env_info['table']['width']
-
-        x_corner_world = table_length / 2 - puck_clearance
-        y_corner_world = table_width / 2 - puck_clearance
-
-        wall_offset_x = max(puck_clearance, 0.05)
-        if x_corner_world <= 1e-3:
-            x_guide_world = x_corner_world
-        else:
-            x_guide_world = max(x_corner_world - wall_offset_x, 0.0)
-            x_guide_world = min(x_guide_world, x_corner_world - 1e-3)
-
-        corner_worlds = np.array([[x_corner_world, y_corner_world, 0.0],
-                                  [x_corner_world, -y_corner_world, 0.0]])
-        guide_worlds = np.array([[x_guide_world, y_corner_world, 0.0],
-                                 [x_guide_world, -y_corner_world, 0.0]])
-
-        corner_targets = []
-        wall_guides = []
-        base_frame = self.env_info["robot"]["base_frame"][0]
-        for corner_world, guide_world in zip(corner_worlds, guide_worlds):
-            corner_robot = world_to_robot(base_frame, corner_world)[0][:2]
-            guide_robot = world_to_robot(base_frame, guide_world)[0][:2]
-            corner_targets.append(corner_robot)
-            wall_guides.append(guide_robot)
-
-        self.corner_targets = np.array(corner_targets)
-        self.wall_guides = np.array(wall_guides)
 
         self.agent_params = {
             'hit_range': [0.8, 1.3],
@@ -126,7 +94,7 @@ class HittingAgent(AgentBase):
         self.x_init = None
         self.hit_finished = False
         self.predicted_time = 0.75
-        self.hit_vel = 1.0
+        self.hit_vel = 0.5
         self.replan_hit = False
         self.plan_thread = threading.Thread(target=self._plan_trajectory_thread, daemon=True)
 
@@ -224,57 +192,10 @@ class HittingAgent(AgentBase):
     def plan_hit_trajectory(self, predicted_state, hit_vel, t_predict):
         puck_pos = predicted_state[:2]
 
-        corner_deltas = self.corner_targets - puck_pos
-        lateral_moves = np.abs(corner_deltas[:, 1])
-        target_idx = np.argmin(lateral_moves)
-        target = self.corner_targets[target_idx]
-        guide = self.wall_guides[target_idx]
+        hit_dir_2d = self.goal_pos_2d - puck_pos[:2]
+        hit_dir_2d = hit_dir_2d / np.linalg.norm(hit_dir_2d)
 
-        dir_raw = target - puck_pos
-        dir_norm = np.array([1.0, 0.0])
-        dist_to_target = np.linalg.norm(dir_raw)
-        if dist_to_target > 1e-6:
-            dir_norm = dir_raw / dist_to_target
-
-        axis_diff = np.abs(target - guide)
-        axis = 0 if axis_diff[0] >= axis_diff[1] else 1
-
-        axis_component = dir_norm[axis]
-        if np.abs(axis_component) < 1e-6:
-            move_dir = np.sign(guide[axis] - puck_pos[axis])
-            if move_dir == 0:
-                move_dir = 1.0
-            dir_norm[axis] = move_dir * 1e-3
-            norm_val = np.linalg.norm(dir_norm)
-            dir_norm = dir_norm / max(norm_val, 1e-6)
-            axis_component = dir_norm[axis]
-
-        t_axis = None
-        if np.abs(axis_component) > 1e-6:
-            t_axis = (guide[axis] - puck_pos[axis]) / axis_component
-
-        if t_axis is None or t_axis <= 0 or t_axis >= max(dist_to_target, 1e-6):
-            to_guide = guide - puck_pos
-            guide_norm = np.linalg.norm(to_guide)
-            if guide_norm > 1e-6:
-                dir_norm = to_guide / guide_norm
-            else:
-                dir_norm = np.array([1.0, 0.0])
-        else:
-            other_axis = 1 - axis
-            point_at_axis = puck_pos + dir_norm * t_axis
-            other_error = guide[other_axis] - point_at_axis[other_axis]
-            if np.abs(other_error) > 1e-3:
-                to_guide = guide - puck_pos
-                guide_norm = np.linalg.norm(to_guide)
-                if guide_norm > 1e-6:
-                    blended_dir = dir_norm + to_guide / guide_norm
-                    dir_norm = blended_dir / max(np.linalg.norm(blended_dir), 1e-6)
-
-        hit_dir_2d = dir_norm / max(np.linalg.norm(dir_norm), 1e-6)
-
-        offset = self.env_info['puck']['radius'] + self.env_info['mallet']['radius']
-        hit_pos_2d = puck_pos - hit_dir_2d * offset
+        hit_pos_2d = puck_pos[:2] - hit_dir_2d * (self.env_info['puck']['radius'] + self.env_info['mallet']['radius'])
         hit_vel_2d = hit_dir_2d * hit_vel
 
         if self.plan_new_trajectory:
@@ -333,8 +254,7 @@ class HittingAgent(AgentBase):
         while len(ee_traj) > 0:
             ee_pos_des = ee_traj[0][:3]
             ee_traj = ee_traj[1:]
-            success, joint_pos_des = inverse_kinematics(self.robot_model, self.robot_data,
-                                                        ee_pos_des, initial_q=init_q)
+            success, joint_pos_des = inverse_kinematics(self.robot_model, self.robot_data, ee_pos_des, initial_q=init_q)
             if not success:
                 joint_pos_traj.clear()
                 return joint_pos_traj
@@ -365,7 +285,7 @@ def main():
     plot_trajectory = False
     env = AirHockeyChallengeWrapper(env="7dof-hit", interpolation_order=3, debug=plot_trajectory)
 
-    agent = HittingAgent(env.base_env.env_info)
+    agent = ChickenHockeyAgent(env.base_env.env_info)
 
     obs = env.reset()
     agent.reset()
@@ -400,3 +320,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    print("Done")
