@@ -32,6 +32,7 @@
                 <geom name="surface" type="box" material="white" size="1.064 0.609 0.0505" pos="0 0 -0.0505"
                       condim="4" friction="0.08 0.08 0.0" priority="1"
                       solref="0.0125 0.5" solimp="0.9 0.999 0.001 0.5 2"/>
+                <site name="table_center" type="capsule" size="0.0015" rgba="0 1 0 1" fromto="0 -0.595 0.002 0 0.0595 0.002"/>
             </body>
             <body name="rim">
 <!--                <geom name="rim_home_l" class="rim" size="0.045 0.197 0.005" pos="-1.019 0.322 0.005"/>-->
