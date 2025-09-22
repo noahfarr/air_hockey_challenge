@@ -7,6 +7,7 @@ from scipy.interpolate import CubicSpline
 from air_hockey_challenge.framework.agent_base import AgentBase
 from air_hockey_challenge.utils import inverse_kinematics, world_to_robot
 from baseline.baseline_agent import BezierPlanner, TrajectoryOptimizer, PuckTracker
+from baseline.baseline_agent.kalman_filter import damping as puck_damping
 
 
 def build_agent(env_info, **kwargs):
@@ -44,6 +45,8 @@ class HittingAgent(AgentBase):
         self.dt = 1 / self.env_info['robot']['control_frequency']
         self.ee_height = self.env_info['robot']["ee_desired_height"]
 
+        self.puck_damping = puck_damping
+
         self.bound_points = np.array([[-(self.env_info['table']['length'] / 2 - 0.05),
                                        -(self.env_info['table']['width'] / 2 - 0.05)],
                                       [-(self.env_info['table']['length'] / 2 - 0.05),
@@ -62,17 +65,13 @@ class HittingAgent(AgentBase):
 
         self.puck_tracker = PuckTracker(self.env_info, agent_id)
 
+        self.corner_targets = self._compute_corner_targets()
+
         if self.env_info['robot']['n_joints'] == 3:
             self.joint_anchor_pos = np.array([-1.15570723, 1.30024401, 1.44280414])
         else:
             self.joint_anchor_pos = np.array([6.28479822e-11, 7.13520517e-01, -2.96302903e-11, -5.02477487e-01,
                                               -7.67250279e-11, 1.92566224e+00, -2.34645597e-11])
-
-        goal_pos = np.array([0.98, 0.0, 0.0])
-        goal_pos_robot = world_to_robot(self.env_info["robot"]["base_frame"][0], goal_pos)
-        self.goal_pos_2d = goal_pos_robot[0][:2]
-
-
 
         self.agent_params = {
             'hit_range': [0.8, 1.3],
@@ -99,6 +98,26 @@ class HittingAgent(AgentBase):
         self.hit_vel = 1.0
         self.replan_hit = False
         self.plan_thread = threading.Thread(target=self._plan_trajectory_thread, daemon=True)
+
+    def _compute_corner_targets(self):
+        safety_margin = (self.env_info['puck']['radius'] +
+                         self.env_info['mallet']['radius'] + 0.02)
+        corner_x = self.env_info['table']['length'] / 2 - safety_margin
+        corner_y = self.env_info['table']['width'] / 2 - safety_margin
+        corner_x = max(corner_x, 0.0)
+        corner_y = max(corner_y, 0.0)
+
+        base_frame = self.env_info['robot']['base_frame'][self.agent_id - 1]
+        table_center = world_to_robot(base_frame, np.array([0.0, 0.0, 0.0]))[0][:2]
+
+        corners_robot = []
+        for sign in (1.0, -1.0):
+            corner_world = np.array([corner_x, sign * corner_y, 0.0])
+            corner_robot = world_to_robot(base_frame, corner_world)[0][:2]
+            corner_robot[0] = max(corner_robot[0], table_center[0] + 0.02)
+            corners_robot.append(corner_robot)
+
+        return np.array(corners_robot)
 
     def draw_action(self, obs):
         if self.restart:
@@ -193,12 +212,37 @@ class HittingAgent(AgentBase):
 
     def plan_hit_trajectory(self, predicted_state, hit_vel, t_predict):
         puck_pos = predicted_state[:2]
+        corner_idx = int(np.argmin(np.abs(self.corner_targets[:, 1] - predicted_state[1])))
+        target_corner = self.corner_targets[corner_idx]
 
-        hit_dir_2d = self.goal_pos_2d - puck_pos[:2]
-        hit_dir_2d = hit_dir_2d / np.linalg.norm(hit_dir_2d)
+        delta = target_corner - puck_pos
+        desired_velocity = delta * self.puck_damping
 
-        hit_pos_2d = puck_pos[:2] - hit_dir_2d * (self.env_info['puck']['radius'] + self.env_info['mallet']['radius'])
-        hit_vel_2d = hit_dir_2d * hit_vel
+        max_speed = max(hit_vel, 1e-3)
+        min_speed = min(0.15, max_speed)
+        speed = np.linalg.norm(desired_velocity)
+
+        if speed > 1e-6:
+            clamped_speed = np.clip(speed, min_speed, max_speed)
+            desired_velocity = desired_velocity * (clamped_speed / speed)
+        else:
+            delta_norm = np.linalg.norm(delta)
+            if delta_norm > 1e-6:
+                direction = delta / delta_norm
+            else:
+                direction = np.array([1.0, 0.0])
+            fallback_speed = np.clip(delta_norm * np.linalg.norm(self.puck_damping), min_speed, max_speed)
+            desired_velocity = direction * fallback_speed
+
+        vel_norm = np.linalg.norm(desired_velocity)
+        if vel_norm < 1e-6:
+            hit_dir_2d = np.array([1.0, 0.0])
+            desired_velocity = hit_dir_2d * min_speed
+        else:
+            hit_dir_2d = desired_velocity / vel_norm
+
+        hit_pos_2d = puck_pos - hit_dir_2d * (self.env_info['puck']['radius'] + self.env_info['mallet']['radius'])
+        hit_vel_2d = desired_velocity
 
         if self.plan_new_trajectory:
             self.q_anchor_pos = self.solve_anchor_pos_ik_null(hit_pos_2d, hit_dir_2d, self.q_init, solve_max_time=5e-3)
