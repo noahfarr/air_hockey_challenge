@@ -126,9 +126,11 @@ class MirrorGoalieTwoTouchAgent(AgentBase):
         self.puck_radius = self.env_info["puck"]["radius"]
         self.mallet_radius = self.env_info["mallet"]["radius"]
 
-        self.joint_vel_limit = self.env_info["robot"]["joint_vel_limit"].copy()
-        self.joint_vel_limit[0] *= 0.95
-        self.joint_vel_limit[1] *= 0.95
+        vel_limits = self.env_info["robot"]["joint_vel_limit"].copy()
+        self.joint_vel_limit = vel_limits * 0.25
+        self.joint_pos_limit = self.env_info["robot"]["joint_pos_limit"].copy()
+        self.max_joint_step = self.joint_vel_limit[1] * self.dt
+        self.min_joint_step = self.joint_vel_limit[0] * self.dt
 
         base_frame = np.array(self.env_info["robot"]["base_frame"][self.agent_id - 1])
         self.base_to_world = base_frame.copy()
@@ -270,12 +272,12 @@ class MirrorGoalieTwoTouchAgent(AgentBase):
             target_vel = np.zeros(3)
             self.force_emergency_clear = True
 
-        dq_target = self._compute_joint_velocities(q_target, joint_pos, target_vel)
+        q_cmd, dq_cmd = self._compute_joint_velocities(q_target, joint_pos, target_vel)
 
-        self.last_q_cmd = q_target.copy()
-        self.last_dq_cmd = dq_target.copy()
+        self.last_q_cmd = q_cmd.copy()
+        self.last_dq_cmd = dq_cmd.copy()
 
-        return np.vstack([q_target, dq_target])
+        return np.vstack([q_cmd, dq_cmd])
 
     # ------------------------------------------------------------------
     # State machine management
@@ -538,19 +540,37 @@ class MirrorGoalieTwoTouchAgent(AgentBase):
         return initial_q.copy(), False
 
     def _compute_joint_velocities(self, q_target, q_current, cart_vel):
-        dq_pos = (q_target - q_current) / self.dt
-        dq = dq_pos.copy()
+        desired_delta = q_target - q_current
+        step = np.clip(desired_delta, self.min_joint_step, self.max_joint_step)
+
+        q_cmd = q_current + step
+        q_cmd = np.clip(q_cmd, self.joint_pos_limit[0], self.joint_pos_limit[1])
+        step = q_cmd - q_current
+        dq_cmd = step / self.dt
 
         if cart_vel is not None and cart_vel.shape[0] == 3:
             try:
-                jac = jacobian(self.robot_model, self.robot_data, q_target)[:3, : self.n_joints]
+                jac = jacobian(self.robot_model, self.robot_data, q_current)[:3, : self.n_joints]
                 dq_task, *_ = np.linalg.lstsq(jac, cart_vel, rcond=1e-4)
-                dq = 0.5 * dq + 0.5 * dq_task
+                dq_task = np.clip(dq_task, self.joint_vel_limit[0], self.joint_vel_limit[1])
+                dq_cmd = 0.5 * dq_cmd + 0.5 * dq_task
             except np.linalg.LinAlgError:
-                dq = dq_pos
+                pass
 
-        dq = np.clip(dq, self.joint_vel_limit[0], self.joint_vel_limit[1])
-        return dq
+        dq_cmd = np.clip(dq_cmd, self.joint_vel_limit[0], self.joint_vel_limit[1])
+
+        delta_cmd = dq_cmd * self.dt
+        sign_mismatch = np.sign(delta_cmd) != np.sign(desired_delta)
+        delta_cmd = np.where(sign_mismatch, 0.0, delta_cmd)
+        overshoot = np.abs(delta_cmd) > np.abs(desired_delta)
+        delta_cmd = np.where(overshoot, np.sign(delta_cmd) * np.abs(desired_delta), delta_cmd)
+        delta_cmd = np.clip(delta_cmd, self.min_joint_step, self.max_joint_step)
+
+        q_cmd = q_current + delta_cmd
+        q_cmd = np.clip(q_cmd, self.joint_pos_limit[0], self.joint_pos_limit[1])
+        dq_cmd = (q_cmd - q_current) / self.dt
+
+        return q_cmd, dq_cmd
 
     def _get_opponent(self, obs):
         ids = self.env_info.get("opponent_ee_ids", [])
