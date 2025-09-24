@@ -17,6 +17,10 @@ from mujoco_playground import MjxEnv, registry
 from mujoco_playground._src.wrapper import wrap_for_brax_training, Wrapper
 import numpy as np
 
+from air_hockey_agent.environments import EnvHit, EnvDefend, EnvPrepare
+
+ENVS = {"defend": EnvDefend, "hit": EnvHit, "prepare": EnvPrepare}
+
 
 class MjxGymnaxWrapper(Environment):
     def __init__(
@@ -101,9 +105,11 @@ class MjxGymnaxWrapper(Environment):
         if self.asymmetric_observation:
             obs = {
                 "state": state.obs["state"] if self.dict_obs else state.obs[..., 0, :],
-                "privileged_state": state.obs["privileged_state"]
-                if self.dict_obs
-                else state.obs[..., 1, :],
+                "privileged_state": (
+                    state.obs["privileged_state"]
+                    if self.dict_obs
+                    else state.obs[..., 1, :]
+                ),
             }
         else:
             obs = state.obs
@@ -235,9 +241,12 @@ class BraxGymnaxWrapper:
         reward_scaling=1.0,
         terminate=True,
     ):
-        env = envs.get_environment(
-            env_name=env_name, backend=backend, terminate_when_unhealthy=terminate
-        )
+        if env_name in ENVS:
+            env = ENVS[env_name]()
+        else:
+            env = envs.get_environment(
+                env_name=env_name, backend=backend, terminate_when_unhealthy=terminate
+            )
         env = EpisodeWrapper(env, episode_length=episode_length, action_repeat=1)
         env = AutoResetWrapper(env)
         self.env = env

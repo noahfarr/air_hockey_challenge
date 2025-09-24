@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 
 @hydra.main(
     version_base=None,
-    config_path="../config/default",
+    config_path="../config",
     config_name="reppo_continuous.yaml",
 )
 def main(cfg: DictConfig):

@@ -33,5 +33,7 @@ dependencies = [
     "torchinfo>=1.8.0",
     "debugpy>=1.8.14",
     "mani-skill>=3.0.0b21",
+    "mushroom-rl>=1.10.1",
+    "dm-control>=1.0.34",
 ]
 

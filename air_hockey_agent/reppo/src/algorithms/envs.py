@@ -25,7 +25,9 @@ from air_hockey_agent.reppo.src.env_utils.jax_wrappers import (
     LogWrapper,
     MjxGymnaxWrapper,
 )
-from air_hockey_agent.reppo.src.env_utils.torch_wrappers.maniskill_wrapper import ManiSkillWrapper
+from air_hockey_agent.reppo.src.env_utils.torch_wrappers.maniskill_wrapper import (
+    ManiSkillWrapper,
+)
 
 Env = gymnasium.Env | Environment[EnvState, EnvParams]
 Space = gymnasium.Space | GymnaxSpace
@@ -127,9 +129,7 @@ def _make_gymnasium_env(cfg: DictConfig) -> EnvSetup[gymnasium.Env]:
         return env
 
     env = gym.vector.SyncVectorEnv([_make for _ in range(cfg.algorithm.num_envs)])
-    eval_env = gym.vector.SyncVectorEnv(
-        [_make for _ in range(cfg.algorithm.num_envs)]
-    )
+    eval_env = gym.vector.SyncVectorEnv([_make for _ in range(cfg.algorithm.num_envs)])
     return EnvSetup(
         env=env,
         eval_env=eval_env,

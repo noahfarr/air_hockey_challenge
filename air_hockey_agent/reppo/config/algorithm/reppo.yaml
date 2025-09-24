@@ -20,7 +20,7 @@ lmbda_min: 0.95 # irrelevant if no exploration noise is added
 # batch settings (need tuning for MJX humanoid)
 num_steps: 128
 num_mini_batches: 128
-num_envs: 1024
+num_envs: 256
 num_epochs: 4
 
 # exploration settings (currently not touched)
@@ -67,14 +67,14 @@ scale_samples_with_action_d: False
 fixed_actor_std: false
 
 network:
-  _target_: src.algorithms.reppo.networks.make_continuous_ff_networks
+  _target_: air_hockey_agent.reppo.src.algorithms.reppo.networks.make_continuous_ff_networks
   _partial_: true
 init:
-  _target_: src.algorithms.reppo.ff_reppo.make_init_fn
+  _target_: air_hockey_agent.reppo.src.algorithms.reppo.ff_reppo.make_init_fn
   _partial_: true
 learner:
-  _target_: src.algorithms.reppo.ff_reppo.make_learner_fn
+  _target_: air_hockey_agent.reppo.src.algorithms.reppo.ff_reppo.make_learner_fn
   _partial_: true
 policy:
-  _target_: src.algorithms.reppo.ff_reppo.make_policy_fn
+  _target_: air_hockey_agent.reppo.src.algorithms.reppo.ff_reppo.make_policy_fn
   _partial_: true
