@@ -153,18 +153,25 @@ def make_log_callback():
     steps = [0]
 
     def log_callback(state, metrics):
+        print("Adding system metrics...")
         add_system_metrics(state, metrics)
+
+        print("Converting metrics to numpy...")
         metrics = jax.tree.map(lambda x: jnp.array(x).mean().item(), metrics)
         steps.append(metrics["sys/time_step"])
         times.append(metrics["sys/time"])
         metric_history.append(metrics)
-  
+
         # Use pop() with a default value of None in case 'advantages' key doesn't exist
         advantages = metrics.pop("train/advantages", None)
+
+        print("Printing logs...")
         print_logs(metrics)
-       
+
         if advantages is not None:
             metrics["train/advantages"] = wandb.Histogram(advantages)
+
+        print("Logging metrics to wandb...")
         wandb.log(metrics, step=int(metrics["sys/time_step"]))
 
     def add_system_metrics(state, metrics):
@@ -194,10 +201,8 @@ def make_log_callback():
                 log_strs.append(f"    {log_item}={metrics[k]:.3f}")
             else:
                 log_strs.append(f"  {k}={metrics[k]:.3f}")
-           
-        logging.info(
-            "\n" + "\n".join(log_strs)
-        )
+
+        logging.info("\n" + "\n".join(log_strs))
 
     return log_callback
 

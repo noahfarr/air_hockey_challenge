@@ -38,7 +38,7 @@ class AirHockeyChallengeWrapper(Wrapper):
         if env == "tournament" and type(interpolation_order) != tuple:
             interpolation_order = (interpolation_order, interpolation_order)
 
-        base_env = env_dict[env](interpolation_order=interpolation_order, **kwargs)
+        base_env = env_dict[env](interpolation_order=interpolation_order)
         self.env_name = env
         self.env_info = base_env.env_info
 
@@ -73,7 +73,7 @@ class AirHockeyChallengeWrapper(Wrapper):
                 ),
                 success=jnp.zeros((), dtype=jnp.int32),
             )
-            
+
         return state
 
     def step(self, state, action):

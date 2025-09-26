@@ -101,7 +101,10 @@ def make_scan_train_fn(
         train_state, metrics = jax.vmap(train_eval_step)(
             jax.random.split(subkey, num_seeds), train_state
         )
+        jax.debug.print("Calling log_callback...")
         jax.debug.callback(log_callback, train_state, metrics)
+        jax.debug.print("Done with log_callback...")
+
         return train_state, metrics
 
     def init_train_state(key: Key) -> TrainState:
