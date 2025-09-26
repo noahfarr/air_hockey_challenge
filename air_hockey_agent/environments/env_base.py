@@ -28,13 +28,22 @@ class EnvBase(Wrapper):
         interp_vel = state.obs[jnp.asarray(self.env_info["joint_vel_ids"][:-1])]
         planned_world_pos = self._fk(interp_pos)
 
-        state.info.update(
-            last_acceleration=last_acceleration,
-            interp_pos=interp_pos,
-            interp_vel=interp_vel,
-            planned_world_pos=planned_world_pos,
-            step=-1,
-        )
+        # state.info.update(
+        #     last_acceleration=last_acceleration,
+        #     interp_pos=interp_pos,
+        #     interp_vel=interp_vel,
+        #     planned_world_pos=planned_world_pos,
+        #     step=-1,
+        # )
+        info = {
+            **state.info,
+            "last_acceleration": last_acceleration,
+            "interp_pos": interp_pos,
+            "interp_vel": interp_vel,
+            "planned_world_pos": planned_world_pos,
+            "step": -1,
+        }
+        state = state.replace(info=info)
 
         state = self.modify_obs(state)
         return state
@@ -60,12 +69,20 @@ class EnvBase(Wrapper):
         )
         abs_action = jnp.vstack([jnp.hstack([new_pos, 0]), jnp.hstack([new_vel, 0])])
 
-        state.info.update(
-            last_acceleration=state.info["last_acceleration"] + jerk * 0.02,
-            interp_pos=new_pos,
-            interp_vel=new_vel,
-            planned_world_pos=self._fk(new_pos),
-        )
+        # state.info.update(
+        #     last_acceleration=state.info["last_acceleration"] + jerk * 0.02,
+        #     interp_pos=new_pos,
+        #     interp_vel=new_vel,
+        #     planned_world_pos=self._fk(new_pos),
+        # )
+        info = {
+            **state.info,
+            "last_acceleration": state.info["last_acceleration"] + jerk * 0.02,
+            "interp_pos": new_pos,
+            "interp_vel": new_vel,
+            "planned_world_pos": self._fk(new_pos),
+        }
+        state = state.replace(info=info)
 
         state = super().step(state, abs_action)
 

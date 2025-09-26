@@ -19,7 +19,9 @@ import numpy as np
 
 from air_hockey_agent.environments import EnvHit, EnvDefend, EnvPrepare
 
-ENVS = {"defend": EnvDefend, "hit": EnvHit, "prepare": EnvPrepare}
+envs.register_environment("defend", EnvDefend)
+envs.register_environment("hit", EnvHit)
+envs.register_environment("prepare", EnvPrepare)
 
 
 class MjxGymnaxWrapper(Environment):
@@ -241,12 +243,9 @@ class BraxGymnaxWrapper:
         reward_scaling=1.0,
         terminate=True,
     ):
-        if env_name in ENVS:
-            env = ENVS[env_name]()
-        else:
-            env = envs.get_environment(
-                env_name=env_name, backend=backend, terminate_when_unhealthy=terminate
-            )
+        env = envs.get_environment(
+            env_name=env_name, backend=backend, terminate_when_unhealthy=terminate
+        )
         env = EpisodeWrapper(env, episode_length=episode_length, action_repeat=1)
         env = AutoResetWrapper(env)
         self.env = env

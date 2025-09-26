@@ -3,6 +3,7 @@ import time
 import gymnasium
 from gymnax.environments.environment import Environment
 import jax
+import tqdx
 from air_hockey_agent.reppo.src.common import (
     Config,
     EvalFn,
@@ -77,7 +78,7 @@ def make_scan_train_fn(
 
     def train_eval_step(key, train_state):
         train_key, eval_key = jax.random.split(key)
-        train_state, train_metrics = jax.lax.scan(
+        train_state, train_metrics = tqdx.scan(
             f=train_step,
             init=train_state,
             xs=jax.random.split(train_key, eval_interval),
@@ -121,7 +122,7 @@ def make_scan_train_fn(
         train_state = jax.vmap(init_train_state)(jax.random.split(init_key, num_seeds))
         keys = jax.random.split(key, num_iterations)
         # Run the training and evaluation loop from the initialized training state
-        state, metrics = jax.lax.scan(f=train_eval_loop_body, init=train_state, xs=keys)
+        state, metrics = tqdx.scan(f=train_eval_loop_body, init=train_state, xs=keys)
         return state, metrics
 
     return jax.jit(scan_train_fn)
@@ -172,8 +173,7 @@ def make_loop_train_fn(
         logging.info(f"Starting training for {num_iterations} iterations.")
         logging.info(f"Train steps per iteration: {train_steps_per_iteration}.")
         logging.info(f"Total time steps: {total_time_steps}.")
-        
-      
+
         step = 0
         for i in range(num_iterations):
             for _ in range(train_steps_per_iteration):
